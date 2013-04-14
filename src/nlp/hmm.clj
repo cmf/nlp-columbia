@@ -74,10 +74,7 @@
   "Map an uncommon word to its common symbol"
   [word]
   (cond
-    (re-find #"\d" word) :NUMERIC
-    (re-matches #"[A-Z]+" word) :ALL-CAPITALS
-    (re-matches #"^.*[A-Z]$" word) :LAST-CAPITAL
-    :else :RARE))
+    (re-find #"\d" word) :NUMERIC (re-matches #"[A-Z]+" word) :ALL-CAPITALS (re-matches #"^.*[A-Z]$" word) :LAST-CAPITAL :else :RARE))
 
 (defn replace-rare
   "Given a word/tag map, returns a map with all instances of
@@ -99,20 +96,24 @@
           tags
           (keys tags)))
 
-(defn get-tags []
-  (with-open [reader (io/reader "/Users/colin/dev/nlp-columbia/data/gene.train")]
-    (loop [sentences (sentences (line-seq reader))
-           tags {}
-           counts {}]
-      (if (seq sentences)
-        (let [items (map #(str/split (str/trim %) #"\s+") (first sentences))
-              tag-sentence (map second items)]
-          (recur (rest sentences) (update-tags items tags) (update-counts items counts)))
-        [tags (dissoc counts [:*] [:STOP])]))))
+(defn get-tags
+  ([]
+   (with-open [reader (io/reader "/Users/colin/dev/nlp-columbia/data/hmm/gene.train")]
+     (get-tags reader)))
+  ([reader]
+   (loop [sentences (sentences (line-seq reader))
+          tags {}
+          counts {}]
+     (if (seq sentences)
+       (let [items (map #(str/split (str/trim %) #"\s+") (first sentences))
+             tag-sentence (map second items)]
+         (recur (rest sentences) (update-tags items tags) (update-counts items counts)))
+       [tags (dissoc counts [:*] [:STOP])]))))
 
 (defn q
   "Calculates conditional probability q(yi | yi-1, yi-2)"
   [trigram counts]
+  (assert (< 0 (get counts (subvec trigram 0 2) 0)) (str trigram))
   (/ (get counts trigram 0)
      (get counts (subvec trigram 0 2) 0)))
 
@@ -120,9 +121,12 @@
   (/ count (get totals tag)))
 
 (defn probability [k u v w v-tag-count pi counts totals]
-  (* (get pi [(dec k) w u])
-     (q [w u v] counts)
-     (e v v-tag-count totals)))
+  (let [pi-val (get pi [(dec k) w u])]
+    (if (= pi-val 0)
+      0
+      (* pi-val
+         (q [w u v] counts)
+         (e v v-tag-count totals)))))
 
 (defn calc-max
   "Returns a function useful for calculating max with reduce"
@@ -167,8 +171,8 @@
         [u v prob] (reduce (calc-max third)
                            (for [u K-1
                                  v all-tags]
-                                [u v (* (get pi [n u v])
-                                        (q [u v :STOP] counts))]))]
+                             [u v (* (get pi [n u v])
+                                     (q [u v :STOP] counts))]))]
     (loop [k (- n 2)
            reversed [v u]
            yk+2 v
@@ -185,8 +189,9 @@
 (defn part-1 [file-name]
   (let [tags (replace-rare (first (get-tags)) only-rare)
         totals (calculate-totals tags)]
-    (with-open [reader (io/reader (str "/Users/colin/dev/nlp-columbia/data/" file-name))
-                writer (io/writer (str "/Users/colin/dev/nlp-columbia/data/" (str/replace file-name \. \_) ".p1.out"))]
+    (with-open [reader (io/reader (str "/Users/colin/dev/nlp-columbia/data/hmm/" file-name))
+                writer (io/writer (str "/Users/colin/dev/nlp-columbia/data/hmm/" (str/replace file-name \. \_) ".p1
+                .out"))]
       (doseq [word (map str/trim (line-seq reader))]
         (if-not (str/blank? word)
           (let [word-tags (get tags word (get tags (only-rare word)))
@@ -207,8 +212,8 @@
         tags (replace-rare tags common-symbol)
         totals (calculate-totals tags)
         all-tags (set (keys totals))]
-    (with-open [reader (io/reader (str "/Users/colin/dev/nlp-columbia/data/" file-name))
-                writer (io/writer (str "/Users/colin/dev/nlp-columbia/data/"
+    (with-open [reader (io/reader (str "/Users/colin/dev/nlp-columbia/data/hmm/" file-name))
+                writer (io/writer (str "/Users/colin/dev/nlp-columbia/data/hmm/"
                                        (str/replace file-name \. \_)
                                        "."
                                        part-name
@@ -231,7 +236,7 @@
 (defn get-counts
   "Unused now that we calculate our own counts"
   []
-  (with-open [reader (io/reader "/Users/colin/dev/nlp-columbia/data/gene.counts")]
+  (with-open [reader (io/reader "/Users/colin/dev/nlp-columbia/data/hmm/gene.counts")]
     (loop [lines (line-seq reader)
            tags {}
            counts {}]
