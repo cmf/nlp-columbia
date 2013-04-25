@@ -74,7 +74,10 @@
   "Map an uncommon word to its common symbol"
   [word]
   (cond
-    (re-find #"\d" word) :NUMERIC (re-matches #"[A-Z]+" word) :ALL-CAPITALS (re-matches #"^.*[A-Z]$" word) :LAST-CAPITAL :else :RARE))
+    (re-find #"\d" word) :NUMERIC
+    (re-matches #"[A-Z]+" word) :ALL-CAPITALS
+    (re-matches #"^.*[A-Z]$" word) :LAST-CAPITAL
+    :else :RARE))
 
 (defn replace-rare
   "Given a word/tag map, returns a map with all instances of
